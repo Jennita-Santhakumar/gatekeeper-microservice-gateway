@@ -1,0 +1,152 @@
+services:
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6390:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  users-postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: users
+      POSTGRES_PASSWORD: users
+      POSTGRES_DB: users_db
+    ports:
+      - "5442:5432"
+    volumes:
+      - users_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U users -d users_db"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  posts-postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: posts
+      POSTGRES_PASSWORD: posts
+      POSTGRES_DB: posts_db
+    ports:
+      - "5443:5432"
+    volumes:
+      - posts_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U posts -d posts_db"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  jaeger:
+    image: jaegertracing/all-in-one:1.60
+    environment:
+      COLLECTOR_OTLP_ENABLED: "true"
+    ports:
+      - "16687:16686" # Jaeger UI
+      - "4318:4318" # OTLP/HTTP receiver (exposed to host for convenience; services use the internal DNS name)
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:16686"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  prometheus:
+    image: prom/prometheus:v2.55.1
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    ports:
+      - "9091:9090"
+    depends_on:
+      gateway:
+        condition: service_healthy
+
+  users-service:
+    build: ./services/users-service
+    environment:
+      DATABASE_URL: postgresql+psycopg://users:users@users-postgres:5432/users_db
+      GATEWAY_ORIGIN: http://localhost:8100
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4318/v1/traces
+      OTEL_SERVICE_NAME: users-service
+    ports:
+      - "8101:8000"
+    depends_on:
+      users-postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/health')\""]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
+
+  posts-service:
+    build: ./services/posts-service
+    environment:
+      DATABASE_URL: postgresql+psycopg://posts:posts@posts-postgres:5432/posts_db
+      GATEWAY_ORIGIN: http://localhost:8100
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4318/v1/traces
+    ports:
+      - "8102:8000"
+    depends_on:
+      posts-postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/health')\""]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
+
+  gateway:
+    build: ./backend
+    environment:
+      JWT_SECRET: dev-secret-change-in-production
+      # The gateway's own small credentials table (see core/db.py, core/models.py
+      # for why this stays separate from users-service's business "users" table).
+      # SQLite is deliberately kept here rather than adding a third Postgres
+      # instance for a single-table credentials store -- persisted via the
+      # gateway_data volume below. See README Design Decisions for the trade-off.
+      GATEWAY_DB_URL: sqlite:////data/gateway_auth.db
+      USERS_SERVICE_URL: http://users-service:8000
+      POSTS_SERVICE_URL: http://posts-service:8000
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4318/v1/traces
+      OTEL_SERVICE_NAME: api-gateway
+      CORS_ORIGINS: http://localhost:5183
+    ports:
+      - "8100:8000"
+    volumes:
+      - gateway_data:/data
+    depends_on:
+      redis:
+        condition: service_healthy
+      users-service:
+        condition: service_healthy
+      posts-service:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        VITE_GATEWAY_URL: http://localhost:8100
+    ports:
+      - "5183:80"
+    depends_on:
+      - gateway
+
+volumes:
+  users_postgres_data:
+  posts_postgres_data:
+  gateway_data:

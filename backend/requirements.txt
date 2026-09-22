@@ -1,0 +1,22 @@
+# setuptools>=81 dropped the pkg_resources module that
+# opentelemetry-instrumentation still imports; pin below that until upstream
+# migrates off it.
+setuptools<81
+flask==3.0.3
+gunicorn==23.0.0
+flask-cors==5.0.0
+pyjwt==2.9.0
+passlib[bcrypt]==1.7.4
+bcrypt==4.2.0
+circuitbreaker==2.0.0
+redis==5.0.8
+requests==2.32.3
+sqlalchemy==2.0.35
+psycopg[binary]==3.2.2
+prometheus-client==0.21.0
+opentelemetry-api==1.27.0
+opentelemetry-sdk==1.27.0
+opentelemetry-exporter-otlp-proto-http==1.27.0
+opentelemetry-instrumentation-flask==0.48b0
+opentelemetry-instrumentation-requests==0.48b0
+python-dotenv==1.0.1
