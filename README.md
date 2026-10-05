@@ -1,5 +1,7 @@
 # Flask Microservice API Gateway
 
+> **Maintained by [Jennita S](https://github.com/Jennita-Santhakumar)** · [LinkedIn](https://linkedin.com/in/jennitas) · jennitasanthakumar0@gmail.com
+
 A Flask-based API gateway that fronts two independent FastAPI microservices with JWT
 authentication, Redis-backed rate limiting, circuit-breaker-protected proxying, correlation-ID
 request tracking, and end-to-end distributed tracing (OpenTelemetry → Jaeger) and metrics
@@ -265,3 +267,7 @@ flask-microservice-api-gateway/
 ## License
 
 MIT — see [LICENSE](LICENSE).
+
+## Credits
+
+Developed by Kabilesh Rajaselvan with contributions from Jennita S.
